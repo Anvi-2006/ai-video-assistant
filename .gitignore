@@ -1,0 +1,117 @@
+```gitignore
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# =========================
+# Virtual Environment
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Environment Variables / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+# =========================
+# Whisper / ML Models & Cache
+# =========================
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Hugging Face cache
+.cache/
+.huggingface/
+huggingface/
+models/
+
+# =========================
+# Audio / Video Files
+# =========================
+*.mp3
+*.wav
+*.m4a
+*.flac
+*.ogg
+*.aac
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+
+# =========================
+# Project Generated Files
+# =========================
+downloads/
+downloades/
+output/
+outputs/
+temp/
+tmp/
+chunks/
+transcripts/
+
+# Vector databases
+vector_db/
+chroma/
+chroma_db/
+
+# =========================
+# Streamlit
+# =========================
+.streamlit/secrets.toml
+
+# =========================
+# IDE / Editors
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# =========================
+# OS Files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Build / Packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+# Testing / Coverage
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+```
