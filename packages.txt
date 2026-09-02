@@ -1,3 +1,1 @@
-git add packages.txt
-git commit -m "Fix packages.txt encoding for Streamlit Cloud"
-git pushffmpeg
+ffmpeg
