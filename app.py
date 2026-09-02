@@ -6,8 +6,13 @@ Run with:
 """
 
 import re
+import os
+import json
+import urllib.request
+import urllib.parse
+import urllib.error
+
 import streamlit as st
-from youtube_transcript_api import YouTubeTranscriptApi
 from dotenv import load_dotenv
 
 from utils.audio_processor import process_input
@@ -31,10 +36,12 @@ def extract_youtube_video_id(url: str) -> str | None:
         r"(?:youtube\.com/watch\?v=)([^&]+)",
         r"(?:youtu\.be/)([^?&]+)",
         r"(?:youtube\.com/shorts/)([^?&]+)",
+        r"(?:youtube\.com/live/)([^?&]+)",
     ]
 
     for pattern in patterns:
         match = re.search(pattern, url)
+
         if match:
             return match.group(1)
 
@@ -47,33 +54,89 @@ def get_youtube_transcript(url: str, language: str) -> str:
     if not video_id:
         raise ValueError("Invalid YouTube URL.")
 
+    api_key = st.secrets.get("SUPADATA_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "SUPADATA_API_KEY is not configured.\n\n"
+            "Please add your Supadata API key to Streamlit "
+            "Cloud Secrets."
+        )
+
+    encoded_url = urllib.parse.quote(url, safe="")
+
+    api_url = (
+        "https://api.supadata.ai/v1/transcript"
+        f"?url={encoded_url}"
+    )
+
+    request = urllib.request.Request(
+        api_url,
+        headers={
+            "x-api-key": api_key,
+            "Accept": "application/json",
+        },
+        method="GET",
+    )
+
     try:
-        api = YouTubeTranscriptApi()
+        with urllib.request.urlopen(request, timeout=60) as response:
+            data = json.loads(response.read().decode("utf-8"))
 
-        # English works for both English and most Hinglish videos
-        fetched_transcript = api.fetch(
-            video_id,
-            languages=["en"]
+    except urllib.error.HTTPError as e:
+
+        try:
+            error_body = e.read().decode("utf-8")
+        except Exception:
+            error_body = ""
+
+        raise RuntimeError(
+            f"Supadata transcript request failed "
+            f"(HTTP {e.code}).\n\n"
+            f"{error_body}"
         )
 
-        transcript = " ".join(
-            snippet.text for snippet in fetched_transcript
+    except urllib.error.URLError as e:
+
+        raise RuntimeError(
+            "Could not connect to the transcript service.\n\n"
+            f"Details: {e.reason}"
         )
-
-        if not transcript.strip():
-            raise RuntimeError("The YouTube transcript is empty.")
-
-        return transcript.strip()
 
     except Exception as e:
+
         raise RuntimeError(
-            "Could not retrieve a YouTube transcript.\n\n"
-            "This video may not have captions available.\n\n"
-            "Please upload the video/audio file directly using "
-            "the Local File option.\n\n"
+            "Could not retrieve the YouTube transcript.\n\n"
             f"Details: {e}"
         )
 
+    # Supadata can return transcript content
+    # either as a string or as timestamped segments.
+
+    content = data.get("content")
+
+    if isinstance(content, str):
+        transcript = content.strip()
+
+    elif isinstance(content, list):
+
+        transcript = " ".join(
+            item.get("text", "")
+            for item in content
+            if isinstance(item, dict)
+        ).strip()
+
+    else:
+        transcript = ""
+
+    if not transcript:
+        raise RuntimeError(
+            "Supadata returned an empty transcript.\n\n"
+            "This video may not be accessible or "
+            "could not be transcribed."
+        )
+
+    return transcript
 # ─────────────────────────────────────────────────────────────────────────────
 # THEME — "Cinematic Editorial": near-black + film-amber + a teal accent,
 # a serif display face paired with a clean grotesk body and mono for data.
