@@ -7,6 +7,7 @@ Run with:
 
 import re
 import streamlit as st
+from youtube_transcript_api import YouTubeTranscriptApi
 from dotenv import load_dotenv
 
 from utils.audio_processor import process_input
@@ -23,6 +24,55 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+
+def extract_youtube_video_id(url: str) -> str | None:
+    patterns = [
+        r"(?:youtube\.com/watch\?v=)([^&]+)",
+        r"(?:youtu\.be/)([^?&]+)",
+        r"(?:youtube\.com/shorts/)([^?&]+)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+
+    return None
+
+
+def get_youtube_transcript(url: str, language: str) -> str:
+    video_id = extract_youtube_video_id(url)
+
+    if not video_id:
+        raise ValueError("Invalid YouTube URL.")
+
+    try:
+        api = YouTubeTranscriptApi()
+
+        # English works for both English and most Hinglish videos
+        fetched_transcript = api.fetch(
+            video_id,
+            languages=["en"]
+        )
+
+        transcript = " ".join(
+            snippet.text for snippet in fetched_transcript
+        )
+
+        if not transcript.strip():
+            raise RuntimeError("The YouTube transcript is empty.")
+
+        return transcript.strip()
+
+    except Exception as e:
+        raise RuntimeError(
+            "Could not retrieve a YouTube transcript.\n\n"
+            "This video may not have captions available.\n\n"
+            "Please upload the video/audio file directly using "
+            "the Local File option.\n\n"
+            f"Details: {e}"
+        )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # THEME — "Cinematic Editorial": near-black + film-amber + a teal accent,
@@ -352,59 +402,102 @@ if run_clicked and source.strip():
 
         status_box = st.empty()
         try:
-            set_step("audio", "active")
-            status_box.info("🔊 Splitting audio into chunks…")
-            chunks = process_input(source)
-            set_step("audio", "done")
+                    # ---------------------------------------------------------
+                    # STEP 1 & 2: GET TRANSCRIPT
+                    # ---------------------------------------------------------
+                    if input_mode == "YouTube URL":
+                        set_step("audio", "active")
+                        status_box.info("🔊 Getting YouTube transcript…")
 
-            set_step("transcript", "active")
-            status_box.info("📝 Transcribing…")
-            transcript = transcribe_all(chunks, language)
-            set_step("transcript", "done")
+                        transcript = get_youtube_transcript(source, language)
 
-            set_step("title", "active")
-            status_box.info("🏷️ Naming the reel…")
-            title = generate_title(transcript)
-            set_step("title", "done")
+                        set_step("audio", "done")
+                        set_step("transcript", "done")
 
-            set_step("summary", "active")
-            status_box.info("📋 Summarising…")
-            summary = summarize(transcript)
-            set_step("summary", "done")
+                    else:
+                        set_step("audio", "active")
+                        status_box.info("🔊 Splitting audio into chunks…")
 
-            set_step("extract", "active")
-            status_box.info("🔍 Extracting action items, decisions, questions…")
-            action_items = extract_action_items(transcript)
-            decisions = extract_key_decisions(transcript)
-            questions = extract_questions(transcript)
-            set_step("extract", "done")
+                        chunks = process_input(source)
 
-            set_step("rag", "active")
-            status_box.info("🧠 Indexing transcript for chat…")
-            rag_chain = build_rag_chain(transcript)
-            set_step("rag", "done")
+                        set_step("audio", "done")
 
-            st.session_state.result = {
-                "title": title,
-                "transcript": transcript,
-                "summary": summary,
-                "action_items": action_items,
-                "key_decisions": decisions,
-                "open_questions": questions,
-                "rag_chain": rag_chain,
-            }
-            st.session_state.pipeline_done = True
-            st.session_state.processed_source = source.strip()
+                        set_step("transcript", "active")
+                        status_box.info("📝 Transcribing…")
 
-            status_box.empty()
-            st.rerun()
+                        transcript = transcribe_all(chunks, language)
+
+                        set_step("transcript", "done")
+
+                    # ---------------------------------------------------------
+                    # STEP 3: TITLE
+                    # ---------------------------------------------------------
+                    set_step("title", "active")
+                    status_box.info("🏷️ Naming the reel…")
+
+                    title = generate_title(transcript)
+
+                    set_step("title", "done")
+
+                    # ---------------------------------------------------------
+                    # STEP 4: SUMMARY
+                    # ---------------------------------------------------------
+                    set_step("summary", "active")
+                    status_box.info("📋 Summarising…")
+
+                    summary = summarize(transcript)
+
+                    set_step("summary", "done")
+
+                    # ---------------------------------------------------------
+                    # STEP 5: EXTRACT INFORMATION
+                    # ---------------------------------------------------------
+                    set_step("extract", "active")
+                    status_box.info(
+                        "🔍 Extracting action items, decisions, questions…"
+                    )
+
+                    action_items = extract_action_items(transcript)
+                    decisions = extract_key_decisions(transcript)
+                    questions = extract_questions(transcript)
+
+                    set_step("extract", "done")
+
+                    # ---------------------------------------------------------
+                    # STEP 6: RAG
+                    # ---------------------------------------------------------
+                    set_step("rag", "active")
+                    status_box.info("🧠 Indexing transcript for chat…")
+
+                    rag_chain = build_rag_chain(transcript)
+
+                    set_step("rag", "done")
+
+                    # ---------------------------------------------------------
+                    # SAVE RESULT
+                    # ---------------------------------------------------------
+                    st.session_state.result = {
+                        "title": title,
+                        "transcript": transcript,
+                        "summary": summary,
+                        "action_items": action_items,
+                        "key_decisions": decisions,
+                        "open_questions": questions,
+                        "rag_chain": rag_chain,
+                    }
+
+                    st.session_state.pipeline_done = True
+                    st.session_state.processed_source = source.strip()
+
+                    status_box.empty()
+                    st.rerun()
 
         except Exception as e:
-            for key, _, _ in STEPS:
-                if st.session_state.pipeline_steps.get(key) == "active":
-                    st.session_state.pipeline_steps[key] = "idle"
-            status_box.error(f"⚠ Pipeline failed: {e}")
+                    for key, _, _ in STEPS:
+                        if st.session_state.pipeline_steps.get(key) == "active":
+                            st.session_state.pipeline_steps[key] = "idle"
 
+                    status_box.error(f"⚠ Pipeline failed: {e}")
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN CONTENT
 # ─────────────────────────────────────────────────────────────────────────────
