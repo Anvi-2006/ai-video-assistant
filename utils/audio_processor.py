@@ -5,25 +5,22 @@ import os
 DOWNLOAD_DIR = 'downloades'
 os.makedirs(DOWNLOAD_DIR,exist_ok = True)
 
-def download_youtube_audio(url :str) ->str:
+def download_youtube_audio(url: str) -> str:
     output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
+
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio",
         "outtmpl": output_path,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "wav",
-                "preferredquality": "192",
-            }
-        ],
+        "noplaylist": True,
         "quiet": True,
+        "no_warnings": True,
     }
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        filename = ydl.prepare_filename(info).replace(".webm", ".wav").replace(".m4a", ".wav")
-    return filename
+        filename = ydl.prepare_filename(info)
 
+    return filename
 
 
 def convert_to_wav(input_path: str) -> str:
@@ -54,13 +51,18 @@ def chunk_audio(wav_path : str , chunk_minutes : int = 10) -> list:
 def process_input(source: str) -> list:
     if source.startswith("http://") or source.startswith("https://"):
         print("Detected YouTube URL. Downloading audio...")
-        wav_path = download_youtube_audio(source)
+        downloaded_path = download_youtube_audio(source)
+
+        print("Converting downloaded audio to WAV...")
+        wav_path = convert_to_wav(downloaded_path)
+
     else:
         print("Detected local file. Converting to WAV...")
         wav_path = convert_to_wav(source)
 
     print("Chunking audio...")
     chunks = chunk_audio(wav_path)
+
     print(f"Audio ready — {len(chunks)} chunk(s) created.")
     return chunks
 
